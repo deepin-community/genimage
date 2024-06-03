@@ -1,5 +1,56 @@
-template-repository (1.0-1) unstable; urgency=medium
+genimage (17-2) unstable; urgency=medium
 
-  * Initial release
+  * Upload to unstable.
+  * Check for fdisk to fix test failure.
 
- -- Tsic404 <liuheng@deepin.org>  Sat, 28 Jan 2023 13:46:49 +0800
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Fri, 16 Feb 2024 19:39:07 +0000
+
+genimage (17-1) experimental; urgency=medium
+
+  * New upstream version 17
+    - Remove upstream applied patches.
+  * Update Standards-Version to 4.6.2
+    - No changes needed.
+  * Depend on pkgconf instead of pkg-config.
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Fri, 16 Feb 2024 16:18:56 +0000
+
+genimage (16-2) unstable; urgency=medium
+
+  * Add upstream patches fixing ext.test. (Closes: #1025732)
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Wed, 14 Dec 2022 19:36:11 +0000
+
+genimage (16-1) unstable; urgency=medium
+
+  [ Debian Janitor ]
+  * Set upstream metadata fields: Bug-Database, Bug-Submit, Repository,
+    Repository-Browse.
+
+  [ Sudip Mukherjee ]
+  * New upstream version 16. (Closes: #1021299)
+    - Update Copyright.
+    - Add new autopkgtests.
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Fri, 07 Oct 2022 20:54:55 +0100
+
+genimage (15-3) unstable; urgency=medium
+
+  * Combine all tests together.
+    - Remove few failing autopkg tests which works on porterbox.
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Sat, 09 Jul 2022 12:16:58 +0100
+
+genimage (15-2) unstable; urgency=medium
+
+  * Source only upload.
+  * Rename superficial test.
+  * Update Standards-Version to 4.6.1.0.
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Tue, 28 Jun 2022 20:56:07 +0100
+
+genimage (15-1) unstable; urgency=medium
+
+  * Initial release (Closes: #1009899)
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Fri, 10 Jun 2022 22:06:36 +0100

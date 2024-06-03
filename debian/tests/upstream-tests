@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -efu
+
+if [ -z "$AUTOPKGTEST_TMP" ]; then
+    AUTOPKGTEST_TMP=tmp
+    mkdir -p ${AUTOPKGTEST_TMP}
+fi
+
+SRCDIR=$(pwd)
+
+cp -rv ${SRCDIR}/test ${AUTOPKGTEST_TMP}
+cd ${AUTOPKGTEST_TMP}
+
+sed -i 's/$(pwd)\/genimage/genimage/' test/test-setup.sh
+./test/ext.test
+./test/filesystem.test
+./test/flash.test
+./test/genimage.test
+./test/hdimage.test
+./test/misc.test
