@@ -1,0 +1,3 @@
+Tests: upstream-tests
+Depends: @, bsdextrautils, genisoimage, device-tree-compiler, u-boot-tools, mtools, qemu-utils, genext2fs, cpio, arm-trusted-firmware-tools
+Restrictions: needs-root, allow-stderr

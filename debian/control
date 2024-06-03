@@ -1,15 +1,21 @@
-Source: template-repository
-Section: unknown
+Source: genimage
+Section: utils
 Priority: optional
-Maintainer: Tsic404 <liuheng@deepin.org>
-Build-Depends: debhelper (>= 11)
-Standards-Version: 4.1.3
-Homepage: https://github.com/deepin-community/template-repository
-#Vcs-Browser: https://salsa.debian.org/debian/deepin-community-template-repository
-#Vcs-Git: https://salsa.debian.org/debian/deepin-community-template-repository.git
+Maintainer: Sudip Mukherjee <sudipm.mukherjee@gmail.com>
+Build-Depends: debhelper-compat (= 13), pkgconf, libconfuse-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/pengutronix/genimage
+Vcs-Browser: https://salsa.debian.org/sudip/genimage
+Vcs-Git: https://salsa.debian.org/sudip/genimage.git
+Rules-Requires-Root: no
 
-Package: template-repository
+Package: genimage
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Suggests: genisoimage, android-sdk-libsparse-utils, device-tree-compiler,
+          u-boot-tools, mtools, dosfstools, mtd-utils, squashfs-tools,
+          qemu-utils, genext2fs, cpio
+Description: Image Creation Tool
+ genimage is a tool to generate multiple filesystem and flash/disk
+ images from a given root filesystem tree. It also supports creating
+ flash/disk images out of different file-system images and files.
