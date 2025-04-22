@@ -83,13 +83,16 @@ static int ext2_generate_mke2fs(struct image *image)
 	if (ret < 0)
 		return ret;
 
-	return systemp(image, "%s%s -t %s%s -I 256 -E 'root_owner=%s,%s'%s %s%s%s %s %s%s %s%s%s '%s' %lldk",
+	return systemp(image, "%s%s -t %s%s -I 256 -E 'root_owner=%s,%s'%s %s%s%s %s %s%s%s %s%s%s '%s' %lldk",
 			ext->conf_env, get_opt("mke2fs"), image->handler->type,
 			ext->usage_type_args, root_owner, options, ext->size_features,
 			image->empty ? "" : "-d '",
 			image->empty ? "" : mountpath(image),
 			image->empty ? "" : "'",
-			extraargs, label ? "-L " : "", label ? label : "",
+			extraargs,
+			label ? "-L '" : "",
+			label ? label : "",
+			label ? "'" : "",
 			features ? "-O '" : "",
 			features ? features : "",
 			features ? "'" : "",
@@ -209,7 +212,7 @@ static cfg_opt_t ext_opts[] = {
 	CFG_STR("features", NULL, CFGF_NONE),
 	CFG_STR("label", NULL, CFGF_NONE),
 	CFG_STR("fs-timestamp", NULL, CFGF_NONE),
-	CFG_BOOL("use-mke2fs", cfg_false, CFGF_NONE),
+	CFG_BOOL("use-mke2fs", cfg_true, CFGF_NONE),
 	CFG_STR("usage-type", NULL, CFGF_NONE),
 	CFG_STR("mke2fs-conf", NULL, CFGF_NONE),
 	CFG_STR("mke2fs_conf", NULL, CFGF_NONE),

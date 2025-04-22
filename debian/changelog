@@ -1,3 +1,16 @@
+genimage (18-1) unstable; urgency=medium
+
+  * New upstream version 18
+    - Remove upstream applied patches.
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Sat, 27 Jul 2024 12:26:02 +0100
+
+genimage (17-3) unstable; urgency=medium
+
+  * Fix FTBFS due to e2fsprogs update. (Closes: #1073486)
+
+ -- Sudip Mukherjee <sudipm.mukherjee@gmail.com>  Sat, 29 Jun 2024 23:39:53 +0100
+
 genimage (17-2) unstable; urgency=medium
 
   * Upload to unstable.

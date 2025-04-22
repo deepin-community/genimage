@@ -60,15 +60,19 @@ EXTRA_DIST += \
 	test/ext2.config \
 	test/ext2test.0.dump \
 	test/ext2test.1.dump \
+	test/ext2test.2.dump \
 	test/ext2percent.config \
 	test/ext2test-percent.0.dump \
 	test/ext2test-percent.1.dump \
+	test/ext2test-percent.2.dump \
 	test/ext3.config \
 	test/ext3test.0.dump \
 	test/ext3test.1.dump \
+	test/ext3test.2.dump \
 	test/ext4.config \
 	test/ext4test.0.dump \
 	test/ext4test.1.dump \
+	test/ext4test.2.dump \
 	test/f2fs.config \
 	test/fip.config \
 	test/fit.its \
@@ -105,8 +109,14 @@ EXTRA_DIST += \
 	test/hdimage-fail5.config \
 	test/hdimage-fail6.config \
 	test/hdimage-fail7.config \
+	test/hdimage-fail8.config \
+	test/hdimage-fail9.config \
+	test/hdimage-fail10.config \
+	test/hdimage-fail11.config \
 	test/hdimage-nopart.config \
 	test/hdimage-nopart.hexdump \
+	test/hdimage-forced-primary.config \
+	test/hdimage-forced-primary.fdisk \
 	test/include-aaa.fdisk \
 	test/include-bbb.fdisk \
 	test/include-ccc.fdisk \
@@ -120,6 +130,9 @@ EXTRA_DIST += \
 	test/mke2fs.conf \
 	test/mke2fs.config \
 	test/mke2fs.0.dump \
+	test/mke2fs.1.dump \
+	test/mke2fs.2.dump \
+	test/mke2fs.3.dump \
 	test/qemu.config \
 	test/qemu.qcow.gz \
 	test/rauc-openssl-ca/ca.cert.pem \
@@ -130,10 +143,14 @@ EXTRA_DIST += \
 	test/sparse.config \
 	test/squashfs.config \
 	test/tar.config \
-	test/test.raucb.info \
-	test/test.raucb.info.new \
-	test/test2.raucb.info \
-	test/test2.raucb.info.new \
+	test/test.raucb.info.1 \
+	test/test.raucb.info.2 \
+	test/test.raucb.info.3 \
+	test/test.raucb.info.4 \
+	test/test2.raucb.info.1 \
+	test/test2.raucb.info.2 \
+	test/test2.raucb.info.3 \
+	test/test2.raucb.info.4 \
 	test/ubi.config \
 	test/ubifs.config \
 	test/vfat.config
