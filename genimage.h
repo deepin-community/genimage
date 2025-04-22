@@ -39,12 +39,14 @@ struct partition {
 	unsigned long long align;
 	unsigned char partition_type;
 	cfg_bool_t bootable;
-	cfg_bool_t extended;
+	cfg_bool_t logical;
+	cfg_bool_t forced_primary;
 	cfg_bool_t read_only;
 	cfg_bool_t hidden;
 	cfg_bool_t no_automount;
 	cfg_bool_t fill;
 	const char *image;
+	off_t imageoffset;
 	struct list_head list;
 	int autoresize;
 	int in_partition_table;

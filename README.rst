@@ -17,7 +17,7 @@ The Configuration File
 The config file of genimage uses a simple configuration language, provided by `libconfuse`_.
 This supports nested sections, as well as simple key-value pairs.
 
-.. _libconfuse: https://github.com/martinh/libconfuse
+.. _libconfuse: https://github.com/libconfuse/libconfuse
 
 Single-line comments can be introduced with ``#`` or ``//``,
 multi-line comments look like ``/* … */`` (as in C).
@@ -131,6 +131,11 @@ Partition options:
 :bootable:		Boolean specifying whether to set the bootable flag.
 :in-partition-table:	Boolean specifying whether to include this partition in
 			the partition table. Defaults to true.
+:forced-primary:	Force this partition to be a primary partition in the
+			MBR partition table, useful when the extended partition should be
+			followed by primary partitions. If there are more partitions
+			defined after the first forced-primary, they must be also defined
+			as forced-primary. Defaults to false.
 :partition-uuid:	UUID string used by GPT partition tables to specify the partition
 			id. Defaults to a random value.
 :partition-type-uuid:	String used by GPT partition tables to specify the partition type.
@@ -143,7 +148,8 @@ Partition options:
 			* ``R``, ``raid``: Linux RAID (a19d880f-05fc-4d3b-a006-743f0f84911e)
 			* ``V``, ``lvm``: Linux LVM (e6d6d379-f507-44c2-a23c-238f2a3df928)
 			* ``F``, ``fat32``: FAT32 / Basic Data Partition (ebd0a0a2-b9e5-4433-87c0-68b6b72699c7)
-			* ``B``, ``barebox-state``: Barebox State (4778ed65-bf42-45fa-9c5b-287a1dc4aab1)
+			* ``barebox-state`` (previously ``B``): Barebox State (4778ed65-bf42-45fa-9c5b-287a1dc4aab1)
+			* ``barebox-env``: Barebox Environment (6c3737f2-07f8-45d1-ad45-15d260aab24d)
 
                         Furthermore, for ``{arch}`` being one of ``alpha``,
                         ``arc``, ``arm``, ``arm64``, ``ia64``, ``loongarch64``,
@@ -511,6 +517,7 @@ Options:
 
 :extraargs:		Extra arguments passed to mkubifs
 :max-size:		Maximum size of the UBIFS image
+:space-fixup:           Instructs the file-system free space to be freed up on first mount.
 
 vfat
 ****
@@ -660,6 +667,7 @@ variable.
 :tar:		path to the tar program (default tar)
 :tune2fs:	path to the tune2fs program (default tune2fs)
 :ubinize:	path to the ubinize program (default ubinize)
+:fiptool:	path to the fiptool utility (default fiptool)
 
 
 Include Configurations Fragments
@@ -670,3 +678,44 @@ To include a ``"foo.cfg"`` config file, use the following statement::
     include("foo.cfg")
 
 This allows to re-use, for example flash configuration files, across different image configurations.
+
+License and Developing
+======================
+
+To contribute to genimage please prepare a pull request on Github. To make
+it possible to include your modifications it's required that your code
+additions are licensed under the same terms as genimage itself. So you
+are required to agree to the following document:
+
+  Developer's Certificate of Origin 1.1
+
+  By making a contribution to this project, I certify that:
+
+  (a) The contribution was created in whole or in part by me and I
+      have the right to submit it under the open source license
+      indicated in the file; or
+
+  (b) The contribution is based upon previous work that, to the best
+      of my knowledge, is covered under an appropriate open source
+      license and I have the right under that license to submit that
+      work with modifications, whether created in whole or in part
+      by me, under the same open source license (unless I am
+      permitted to submit under a different license), as indicated
+      in the file; or
+
+  (c) The contribution was provided directly to me by some other
+      person who certified (a), (b) or (c) and I have not modified
+      it.
+
+  (d) I understand and agree that this project and the contribution
+      are public and that a record of the contribution (including all
+      personal information I submit with it, including my sign-off) is
+      maintained indefinitely and may be redistributed consistent with
+      this project or the open source license(s) involved.
+
+Your agreement is expressed by adding a sign-off line to each of your
+commits (e.g. using ``git commit -s``) looking as follows:
+
+        Signed-off-by: Random J Developer <random@developer.example.org>
+
+with your identity and email address matching the commit meta data.

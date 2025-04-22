@@ -96,6 +96,7 @@ static cfg_opt_t partition_opts[] = {
 	CFG_STR("align", NULL, CFGF_NONE),
 	CFG_INT("partition-type", 0, CFGF_NONE),
 	CFG_BOOL("bootable", cfg_false, CFGF_NONE),
+	CFG_BOOL("forced-primary", cfg_false, CFGF_NONE),
 	CFG_BOOL("read-only", cfg_false, CFGF_NONE),
 	CFG_BOOL("hidden", cfg_false, CFGF_NONE),
 	CFG_BOOL("no-automount", cfg_false, CFGF_NONE),
@@ -396,6 +397,7 @@ static int parse_partitions(struct image *image, cfg_t *imagesec)
 		part->align = cfg_getint_suffix(partsec, "align");
 		part->partition_type = cfg_getint(partsec, "partition-type");
 		part->bootable = cfg_getbool(partsec, "bootable");
+		part->forced_primary = cfg_getbool(partsec, "forced-primary");
 		part->read_only = cfg_getbool(partsec, "read-only");
 		part->hidden = cfg_getbool(partsec, "hidden");
 		part->no_automount = cfg_getbool(partsec, "no-automount");
@@ -576,7 +578,11 @@ const char *mountpath(const struct image *image)
 	return mp->mountpath;
 }
 
-static int tmppath_generated;
+static enum {
+	TMPPATH_NONE,
+	TMPPATH_CHECKED,
+	TMPPATH_CREATED
+} tmppath_generated;
 
 static void check_tmp_path(void)
 {
@@ -595,6 +601,7 @@ static void check_tmp_path(void)
 		ret = systemp(NULL, "mkdir -p \"%s\"", tmppath());
 		if (ret)
 			exit(1);
+		tmppath_generated = TMPPATH_CREATED;
 		return;
 	}
 
@@ -607,14 +614,22 @@ static void check_tmp_path(void)
 			exit(1);
 		}
 	}
-	tmppath_generated = 1;
+	tmppath_generated = TMPPATH_CHECKED;
 	closedir(dir);
 }
 
 static void cleanup(void)
 {
-	if (tmppath_generated)
-		systemp(NULL, "rm -rf \"%s\"/*", tmppath());
+	switch (tmppath_generated) {
+		case TMPPATH_CREATED:
+			systemp(NULL, "rm -rf \"%s/\"", tmppath());
+			break;
+		case TMPPATH_CHECKED:
+			systemp(NULL, "rm -rf \"%s\"/*", tmppath());
+			break;
+		default:
+			break;
+	}
 }
 
 static cfg_opt_t top_opts[] = {

@@ -35,10 +35,12 @@
 #define TYPE_GPT    2
 #define TYPE_HYBRID (TYPE_MBR|TYPE_GPT)
 
+#define PARTITION_TYPE_EXTENDED 0x0F
+
 struct hdimage {
-	unsigned int extended_partition;
+	unsigned int extended_partition_index;
+	struct partition *extended_partition;
 	unsigned long long align;
-	unsigned long long extended_lba;
 	uint32_t disksig;
 	const char *disk_uuid;
 	int table_type;
@@ -125,10 +127,12 @@ static void lba_to_chs(unsigned int lba, unsigned char *chs)
 	chs[2] = (c & 0xff);
 }
 
-static void hdimage_setup_chs(struct mbr_partition_entry *entry)
+static void hdimage_setup_chs(struct mbr_partition_entry *entry,
+			      unsigned long long offset_sectors)
 {
-	lba_to_chs(entry->relative_sectors, entry->first_chs);
-	lba_to_chs(entry->relative_sectors + entry->total_sectors - 1,
+	lba_to_chs(entry->relative_sectors + offset_sectors,
+		   entry->first_chs);
+	lba_to_chs(entry->relative_sectors + entry->total_sectors - 1 + offset_sectors,
 		   entry->last_chs);
 }
 
@@ -151,32 +155,24 @@ static int hdimage_insert_mbr(struct image *image, struct list_head *partitions)
 	list_for_each_entry(part, partitions, list) {
 		struct mbr_partition_entry *entry;
 
-		if (!part->in_partition_table)
+		if (!part->in_partition_table || part->logical)
 			continue;
 
 		if (hd->table_type == TYPE_HYBRID && !part->partition_type)
 			continue;
 
-		if (hd->table_type == TYPE_HYBRID && part->extended)
-			continue;
-
 		entry = &mbr.part_entry[i];
 
 		entry->boot = part->bootable ? 0x80 : 0x00;
-		if (!part->extended) {
-			entry->partition_type = part->partition_type;
-			entry->relative_sectors = part->offset/512;
-			entry->total_sectors = part->size/512;
-		}
-		else {
-			entry->partition_type = 0x0F;
-			entry->relative_sectors = (hd->extended_lba)/512;
-			entry->total_sectors = (image->size - hd->extended_lba)/512;
-		}
-		hdimage_setup_chs(entry);
+		entry->partition_type = part->partition_type;
+		entry->relative_sectors = part->offset/512;
+		entry->total_sectors = part->size/512;
+		hdimage_setup_chs(entry, 0);
 
-		if (part->extended)
-			break;
+		image_debug(image, "[MBR entry %d]: type=%x start=%d size=%d\n",
+					i, entry->partition_type,
+					entry->relative_sectors, entry->total_sectors);
+
 		i++;
 	}
 
@@ -191,7 +187,7 @@ static int hdimage_insert_mbr(struct image *image, struct list_head *partitions)
 		entry->relative_sectors = 1;
 		entry->total_sectors = hd->gpt_location / 512 + GPT_SECTORS - 2;
 
-		hdimage_setup_chs(entry);
+		hdimage_setup_chs(entry, 0);
 	}
 
 	mbr.boot_signature = htole16(0xaa55);
@@ -215,8 +211,9 @@ static int hdimage_insert_ebr(struct image *image, struct partition *part)
 	struct mbr_partition_entry *entry;
 	char ebr[4*sizeof(struct mbr_partition_entry)+2], *part_table;
 	int ret;
+	unsigned long long ebr_offset = part->offset - hd->align + 446;
 
-	image_info(image, "writing EBR\n");
+	image_debug(image, "writing EBR to sector %llu\n", ebr_offset / 512);
 
 	memset(ebr, 0, sizeof(ebr));
 	part_table = ebr;
@@ -226,17 +223,21 @@ static int hdimage_insert_ebr(struct image *image, struct partition *part)
 	entry->partition_type = part->partition_type;
 	entry->relative_sectors = hd->align/512;
 	entry->total_sectors = part->size/512;
-	hdimage_setup_chs(entry);
+	// absolute CHS address of the logical partition
+	// equals to absolute partition offset
+	hdimage_setup_chs(entry, (part->offset - hd->align) / 512);
 	struct partition *p = part;
 	list_for_each_entry_continue(p, &image->partitions, list) {
-		if (!p->extended)
+		if (!p->logical)
 			continue;
 		++entry;
 		entry->boot = 0x00;
-		entry->partition_type = 0x0F;
-		entry->relative_sectors = (p->offset - hd->align - hd->extended_lba)/512;
+		entry->partition_type = PARTITION_TYPE_EXTENDED;
+		entry->relative_sectors = (p->offset - hd->align - hd->extended_partition->offset)/512;
 		entry->total_sectors = (p->size + hd->align)/512;
-		hdimage_setup_chs(entry);
+		// absolute CHS address of the next EBR
+		// equals to relative address within extended partition + partition start
+		hdimage_setup_chs(entry, hd->extended_partition->offset / 512);
 		break;
 	}
 
@@ -245,7 +246,7 @@ static int hdimage_insert_ebr(struct image *image, struct partition *part)
 	part_table[1] = 0xaa;
 
 	ret = insert_data(image, ebr, imageoutfile(image), sizeof(ebr),
-			  part->offset - hd->align + 446);
+			  ebr_offset);
 	if (ret) {
 		image_error(image, "failed to write EBR\n");
 		return ret;
@@ -276,8 +277,8 @@ static const struct gpt_partition_type_shortcut_t gpt_partition_type_shortcuts[]
 	{ "lvm"                         , "e6d6d379-f507-44c2-a23c-238f2a3df928" },
 	{ "F"                           , "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7" },
 	{ "fat32"                       , "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7" },
-	{ "B"                           , "4778ed65-bf42-45fa-9c5b-287a1dc4aab1" },
 	{ "barebox-state"               , "4778ed65-bf42-45fa-9c5b-287a1dc4aab1" },
+	{ "barebox-env"                 , "6c3737f2-07f8-45d1-ad45-15d260aab24d" },
 	/* Discoverable Partitions Specification GUID, see
 	 * https://uapi-group.org/specifications/specs/discoverable_partitions_specification/
 	 */
@@ -577,13 +578,15 @@ static int hdimage_generate(struct image *image)
 	list_for_each_entry(part, &image->partitions, list) {
 		struct image *child;
 
-		image_info(image, "adding partition '%s'%s%s%s%s ...\n", part->name,
+		image_info(image, "adding %s partition '%s'%s%s%s%s ...\n",
+			part->logical ? "logical" : "primary",
+			part->name,
 			part->in_partition_table ? " (in MBR)" : "",
 			part->image ? " from '": "",
 			part->image ? part->image : "",
 			part->image ? "'" : "");
 
-		if (part->extended) {
+		if (part->logical) {
 			ret = hdimage_insert_ebr(image, part);
 			if (ret) {
 				image_error(image, "failed to write EBR\n");
@@ -750,29 +753,223 @@ fake_partition(const char *name, unsigned long long offset, unsigned long long s
 	return p;
 }
 
+static void ensure_extended_partition_index(struct image *image)
+{
+	struct hdimage *hd = image->handler_priv;
+	struct partition *part;
+	int count = 0;
+
+	if (hd->extended_partition_index)
+		return;
+
+	list_for_each_entry(part, &image->partitions, list) {
+		if (!part->in_partition_table)
+			continue;
+
+		if (++count > 4) {
+			hd->extended_partition_index = 4;
+			return;
+		}
+	}
+}
+
+static int setup_logical_partitions(struct image *image)
+{
+	struct hdimage *hd = image->handler_priv;
+	struct partition *part;
+	bool in_extended = false, found_extended = false;
+	unsigned int count = 0, mbr_entries = 0;
+
+	if (hd->extended_partition_index > 4) {
+		image_error(image, "invalid extended partition index (%i). must be "
+				"less or equal to 4 (0 for automatic)\n",
+				hd->extended_partition_index);
+		return -EINVAL;
+	}
+
+	if (hd->table_type != TYPE_MBR)
+		return 0;
+
+	ensure_extended_partition_index(image);
+
+	if (!hd->extended_partition_index)
+		return 0;
+
+	list_for_each_entry(part, &image->partitions, list) {
+		if (!part->in_partition_table)
+			continue;
+
+		++count;
+
+		if (hd->extended_partition_index == count) {
+			size_t offset = part->offset ? part->offset - hd->align : 0;
+			struct partition *p = fake_partition("[Extended]", offset, 0);
+			p->in_partition_table = true;
+			p->partition_type = PARTITION_TYPE_EXTENDED;
+			p->align = hd->align;
+
+			hd->extended_partition = p;
+			/* insert before the first logical partition */
+			list_add_tail(&p->list, &part->list);
+
+			in_extended = found_extended = true;
+			++mbr_entries;
+		}
+
+		if (part->forced_primary)
+			in_extended = false;
+		if (in_extended && !part->forced_primary)
+			part->logical = true;
+		else
+			++mbr_entries;
+
+		if (part->forced_primary) {
+			if (!found_extended) {
+				image_error(image, "partition %s: forced-primary can only be used for "
+						   "partitions following the extended partition\n",
+					    part->name);
+				return -EINVAL;
+			}
+		} else if (!in_extended && found_extended) {
+			image_error(image,
+				    "cannot create non-primary partition %s after forced-primary partition\n",
+				    part->name);
+			return -EINVAL;
+		}
+		if (mbr_entries > 4) {
+			image_error(image, "too many primary partitions\n");
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static int setup_uuid(struct image *image, cfg_t *cfg)
+{
+	struct hdimage *hd = image->handler_priv;
+	const char *disk_signature = cfg_getstr(cfg, "disk-signature");
+
+	hd->disk_uuid = cfg_getstr(cfg, "disk-uuid");
+	if (hd->disk_uuid) {
+		if (!(hd->table_type & TYPE_GPT)) {
+			image_error(image, "'disk-uuid' is only valid for gpt and hybrid partition-table-type\n");
+			return -EINVAL;
+		}
+		if (uuid_validate(hd->disk_uuid) == -1) {
+			image_error(image, "invalid disk UUID: %s\n", hd->disk_uuid);
+			return -EINVAL;
+		}
+	}
+	else {
+		hd->disk_uuid = uuid_random();
+	}
+
+	if (!disk_signature)
+		hd->disksig = 0;
+	else if (!strcmp(disk_signature, "random"))
+		hd->disksig = random();
+	else {
+		if (!(hd->table_type & TYPE_MBR)) {
+			image_error(image, "'disk-signature' is only valid for mbr and hybrid partition-table-type\n");
+			return -EINVAL;
+		}
+		hd->disksig = strtoul(disk_signature, NULL, 0);
+	}
+	return 0;
+}
+
+static int setup_part_autoresize(struct image *image, struct partition *part, bool *resized)
+{
+	struct hdimage *hd = image->handler_priv;
+	long long partsize;
+
+	if (!part->autoresize)
+		return 0;
+
+	if (*resized) {
+		image_error(image, "'autoresize' is only supported "
+			    "for one partition\n");
+		return -EINVAL;
+	}
+	if (image->size == 0) {
+		image_error(image, "the image size must be specified "
+			    "when using an 'autoresize' partition\n");
+		return -EINVAL;
+	}
+
+	partsize = image->size - part->offset;
+	if (hd->table_type & TYPE_GPT)
+		partsize -= GPT_SECTORS * 512;
+	partsize = rounddown(partsize, part->align);
+	if (partsize <= 0) {
+		image_error(image, "partitions exceed device size\n");
+		return -EINVAL;
+	}
+	if (partsize < (long long)part->size) {
+		image_error(image, "auto-resize partition %s ends up with a size %lld"
+			    " smaller than minimum %lld\n", part->name, partsize, part->size);
+		return -EINVAL;
+	}
+	part->size = partsize;
+
+	*resized = true;
+	return 0;
+}
+
+static int setup_part_image(struct image *image, struct partition *part)
+{
+	struct hdimage *hd = image->handler_priv;
+	struct image *child;
+
+	if (!part->image)
+		return 0;
+
+	child = image_get(part->image);
+	if (!child) {
+		image_error(image, "could not find %s\n",
+				part->image);
+		return -EINVAL;
+	}
+	if (!part->size) {
+		if (part->in_partition_table)
+			part->size = roundup(child->size, part->align);
+		else
+			part->size = child->size;
+	}
+	if (child->size > part->size) {
+		image_error(image, "part %s size (%lld) too small for %s (%lld)\n",
+				part->name, part->size, child->file, child->size);
+		return -EINVAL;
+	}
+	if (part->offset + child->size > hd->file_size) {
+		size_t file_size = part->offset + child->size;
+		if (file_size > hd->file_size)
+			hd->file_size = file_size;
+	}
+
+	return 0;
+}
+
 static int hdimage_setup(struct image *image, cfg_t *cfg)
 {
 	struct partition *part;
-	struct partition *autoresize_part = NULL;
-	int has_extended;
 	unsigned int partition_table_entries = 0, hybrid_entries = 0;
 	unsigned long long now = 0;
-	const char *disk_signature, *table_type;
+	const char *table_type;
 	struct hdimage *hd = xzalloc(sizeof(*hd));
 	struct partition *gpt_backup = NULL;
+	bool partition_resized = false;
+	int ret;
 
+	image->handler_priv = hd;
 	hd->align = cfg_getint_suffix(cfg, "align");
-	hd->extended_partition = cfg_getint(cfg, "extended-partition");
-	disk_signature = cfg_getstr(cfg, "disk-signature");
+	hd->extended_partition_index = cfg_getint(cfg, "extended-partition");
 	table_type = cfg_getstr(cfg, "partition-table-type");
 	hd->gpt_location = cfg_getint_suffix(cfg, "gpt-location");
 	hd->gpt_no_backup = cfg_getbool(cfg, "gpt-no-backup");
 	hd->fill = cfg_getbool(cfg, "fill");
-	hd->disk_uuid = cfg_getstr(cfg, "disk-uuid");
 
 	if (is_block_device(imageoutfile(image))) {
-		int ret;
-
 		if (image->size) {
 			image_error(image, "image size must not be specified for a block device target\n");
 			return -EINVAL;
@@ -809,61 +1006,19 @@ static int hdimage_setup(struct image *image, cfg_t *cfg)
 	if (!hd->align)
 		hd->align = hd->table_type == TYPE_NONE ? 1 : 512;
 
-	if (hd->extended_partition > 4) {
-		image_error(image, "invalid extended partition index (%i). must be "
-				"inferior or equal to 4 (0 for automatic)\n",
-				hd->extended_partition);
-		return -EINVAL;
-	}
-
 	if ((hd->table_type != TYPE_NONE) && ((hd->align % 512) || (hd->align == 0))) {
 		image_error(image, "partition alignment (%lld) must be a "
 				"multiple of 1 sector (512 bytes)\n", hd->align);
 		return -EINVAL;
 	}
-	list_for_each_entry(part, &image->partitions, list) {
-		if (hd->table_type == TYPE_NONE)
-			part->in_partition_table = false;
-		if (part->in_partition_table)
-			++partition_table_entries;
-		if (!part->align)
-			part->align = (part->in_partition_table || hd->table_type == TYPE_NONE) ? hd->align : 1;
-		if (part->in_partition_table && part->align % hd->align) {
-			image_error(image, "partition alignment (%lld) of partition %s "
-				    "must be multiple of image alignment (%lld)",
-				    part->align, part->name, hd->align);
-		}
-	}
-	if (hd->table_type == TYPE_MBR && !hd->extended_partition &&
-			partition_table_entries > 4)
-		hd->extended_partition = 4;
-	has_extended = hd->extended_partition > 0;
 
-	if (hd->disk_uuid) {
-		if (!(hd->table_type & TYPE_GPT)) {
-			image_error(image, "'disk-uuid' is only valid for gpt and hybrid partition-table-type\n");
-			return -EINVAL;
-		}
-		if (uuid_validate(hd->disk_uuid) == -1) {
-			image_error(image, "invalid disk UUID: %s\n", hd->disk_uuid);
-			return -EINVAL;
-		}
-	}
-	else {
-		hd->disk_uuid = uuid_random();
-	}
+	ret = setup_logical_partitions(image);
+	if (ret < 0)
+		return ret;
 
-	if (!disk_signature)
-		hd->disksig = 0;
-	else if (!strcmp(disk_signature, "random"))
-		hd->disksig = random();
-	else {
-		if (!(hd->table_type & TYPE_MBR)) {
-			image_error(image, "'disk-signature' is only valid for mbr and hybrid partition-table-type\n");
-			return -EINVAL;
-		}
-		hd->disksig = strtoul(disk_signature, NULL, 0);
-	}
+	ret = setup_uuid(image, cfg);
+	if (ret < 0)
+		return ret;
 
 	if (hd->gpt_location == 0) {
 		hd->gpt_location = 2*512;
@@ -899,19 +1054,17 @@ static int hdimage_setup(struct image *image, cfg_t *cfg)
 
 	partition_table_entries = 0;
 	list_for_each_entry(part, &image->partitions, list) {
-		if (part->autoresize) {
-			if (autoresize_part) {
-				image_error(image, "'autoresize' is only supported "
-					    "for one partition\n");
-				return -EINVAL;
-			}
-			autoresize_part = part;
-			if (image->size == 0) {
-				image_error(image, "the image size must be specified "
-					    "when using an 'autoresize' partition\n");
-				return -EINVAL;
-			}
+		if (hd->table_type == TYPE_NONE)
+			part->in_partition_table = false;
+
+		if (!part->align)
+			part->align = (part->in_partition_table || hd->table_type == TYPE_NONE) ? hd->align : 1;
+		if (part->in_partition_table && part->align % hd->align) {
+			image_error(image, "partition alignment (%lld) of partition %s "
+				    "must be multiple of image alignment (%lld)",
+				    part->align, part->name, hd->align);
 		}
+
 		if (part->partition_type_uuid && !(hd->table_type & TYPE_GPT)) {
 			image_error(image, "part %s: 'partition-type-uuid' is only valid for gpt and hybrid partition-table-type\n",
 					part->name);
@@ -958,12 +1111,10 @@ static int hdimage_setup(struct image *image, cfg_t *cfg)
 			if (part->partition_type)
 				++hybrid_entries;
 		}
-		/* reserve space for extended boot record if necessary */
 		if (part->in_partition_table)
 			++partition_table_entries;
-		part->extended = has_extended && part->in_partition_table &&
-			(partition_table_entries >= hd->extended_partition);
-		if (part->extended) {
+		if (part->logical) {
+			/* reserve space for extended boot record */
 			now += hd->align;
 			now = roundup(now, part->align);
 		}
@@ -978,8 +1129,6 @@ static int hdimage_setup(struct image *image, cfg_t *cfg)
 		if (!part->offset && (part->in_partition_table || hd->table_type == TYPE_NONE)) {
 			part->offset = roundup(now, part->align);
 		}
-		if (part->extended && !hd->extended_lba)
-			hd->extended_lba = part->offset - hd->align;
 
 		if (part->offset % part->align) {
 			image_error(image, "part %s offset (%lld) must be a"
@@ -987,48 +1136,22 @@ static int hdimage_setup(struct image *image, cfg_t *cfg)
 					part->name, part->offset, part->align);
 			return -EINVAL;
 		}
-		if (part->autoresize) {
-			long long partsize = image->size - part->offset;
-			if (gpt_backup)
-				partsize -= gpt_backup->size;
-			partsize = rounddown(partsize, part->align);
-			if (partsize <= 0) {
-				image_error(image, "partitions exceed device size\n");
-				return -EINVAL;
-			}
-			if (partsize < (long long)part->size) {
-				image_error(image, "auto-resize partition %s ends up with a size %lld"
-					    " smaller than minimum %lld\n", part->name, partsize, part->size);
-				return -EINVAL;
-			}
-			part->size = partsize;
-		}
-		if (part->image) {
-			struct image *child = image_get(part->image);
-			if (!child) {
-				image_error(image, "could not find %s\n",
-						part->image);
-				return -EINVAL;
-			}
-			if (!part->size) {
-				if (part->in_partition_table)
-					part->size = roundup(child->size, part->align);
-				else
-					part->size = child->size;
-			}
-			if (child->size > part->size) {
-				image_error(image, "part %s size (%lld) too small for %s (%lld)\n",
-						part->name, part->size, child->file, child->size);
-				return -EINVAL;
-			}
-		}
-		if (!part->size) {
+		ret = setup_part_autoresize(image, part, &partition_resized);
+		if (ret < 0)
+			return ret;
+
+		ret = setup_part_image(image, part);
+		if (ret < 0)
+			return ret;
+
+		/* the size of the extended partition will be filled in later */
+		if (!part->size && part != hd->extended_partition) {
 			image_error(image, "part %s size must not be zero\n",
 					part->name);
 			return -EINVAL;
 		}
-		if (!part->extended) {
-			int ret = check_overlap(image, part);
+		if (!part->logical) {
+			ret = check_overlap(image, part);
 			if (ret)
 				return ret;
 		} else if (now > part->offset) {
@@ -1045,14 +1168,15 @@ static int hdimage_setup(struct image *image, cfg_t *cfg)
 		if (part->offset + part->size > now)
 			now = part->offset + part->size;
 
-		if (part->image) {
-			struct image *child = image_get(part->image);
-			if (part->offset + child->size > hd->file_size) {
-				hd->file_size = part->offset + child->size;
-			}
+		if (part->logical) {
+			size_t file_size = part->offset - hd->align + 512;
+			if (file_size > hd->file_size)
+				hd->file_size = file_size;
 		}
-		else if (part->extended)
-			hd->file_size = part->offset - hd->align + 512;
+
+		if (part->logical) {
+			hd->extended_partition->size = now - hd->extended_partition->offset;
+		}
 	}
 
 	if (hybrid_entries > 3) {
@@ -1076,8 +1200,6 @@ static int hdimage_setup(struct image *image, cfg_t *cfg)
 
 	if (hd->fill || ((hd->table_type & TYPE_GPT) && !hd->gpt_no_backup))
 		hd->file_size = image->size;
-
-	image->handler_priv = hd;
 
 	return 0;
 }
